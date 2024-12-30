@@ -53,6 +53,14 @@ jobs:
         choco install --no-progress doxygen.install
         choco install --no-progress libreoffice-fresh
         Add-Content $env:GITHUB_PATH "C:\Program Files\MiKTeX\miktex\bin\x64\"
+    # - run: miktex --admin --verbose packages update-package-database
+    # - run: miktex --admin --verbose packages update
+    # - run: miktex --verbose packages update
+    # - run: miktex --admin --verbose packages install cm-super
+    # - run: miktex --admin --verbose fndb refresh
+    # - run: initexmf --admin --verbose --update-fndb
+    # - run: initexmf --admin --verbose --mklinks --force
+    - run: updmap --admin
 
     - name: Create directories
       run: |
