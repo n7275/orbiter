@@ -32,16 +32,16 @@ set(CMAKE_MODULE_PATH
 	${CMAKE_MODULE_PATH}
 )
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8) # 64-bit build?
-	set(BUILD64 1)
-	set(ARCH "x64")
-	set(PLATFORM_STRING "x64")
-else()
+if(MSVC AND NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 	set(BUILD64 0)
 	set(ARCH "x86")
-	set(PLATFORM_STRING "Win32")
+  add_link_options("/LARGEADDRESSAWARE")
+else()
+	set(BUILD64 1)
+	set(ARCH "x64")
 endif()
 
+# This is important for building using vs generator (jarmonik)
 if (NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
 	add_compile_options(/MP)
 endif()
@@ -90,14 +90,10 @@ set(GDICLIENT_LIB $<TARGET_LINKER_FILE:GDIClient>)
 
 set(EXTERN_DIR "${CMAKE_SOURCE_DIR}/Extern")
 
-set(DX7SDK_PATH "${EXTERN_DIR}/mssdk_dx7")
-set(DX7SDK_INCLUDE_DIR "${DX7SDK_PATH}/include")
-set(DX7SDK_LIB_DIR "${DX7SDK_PATH}/lib")
-
 set(HTMLHELP_DIR "${EXTERN_DIR}/Htmlhelp")
 set(HTMLHELP_INCLUDE_DIR ${HTMLHELP_DIR}/include)
 set(HTMLHELP_LIB_DIR ${HTMLHELP_DIR}/lib-${ARCH})
-set(HTMLHELP_LIB ${HTMLHELP_LIB_DIR}/Htmlhelp.lib)
+set(HTMLHELP_LIB ${HTMLHELP_LIB_DIR}/Htmlhelp.Lib)
 
 set(ORBITER_TOOL_MESHC "$<TARGET_FILE:meshc>")
 set(ldoc $<TARGET_FILE:lua::exe> ${ORBITER_BINARY_ROOT_DIR}/packages/LDoc/ldoc.lua -v --multimodule)
@@ -118,6 +114,8 @@ set(Qt5_x64_DIR
 if(MSVC)
   add_compile_options(/we4311 /DNOMINMAX)
   add_link_options("/NODEFAULTLIB:\"LIBCMTD\"")
+else()
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH true)
 endif()
 
 # Copy data and binary assets from source to binary tree to provide a working Orbiter environment
@@ -155,47 +153,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pdftex_fix.bat.in ${PDFTEX_CMD}
 
 # =====================================================================================
 
-set(OrbiterExe_graphics "Orbiter (built-in DX7 graphics engine)")
-set(OrbiterExe_ng "Orbiter (graphics server version)")
-set(OrbiterExe_both "Both (inline DX7 graphics + graphics server)")
-
-if(BUILD64) # only allow graphics server version on x64 builds
-
-	set(ORBITER_GRAPHICS ${OrbiterExe_ng})
-
-else()
-
-	set(ORBITER_GRAPHICS
-		${OrbiterExe_both}
-		CACHE
-		STRING
-		"Orbiter executables to be built."
-	)
-	set_property(CACHE ORBITER_GRAPHICS
-		PROPERTY
-		STRINGS ${OrbiterExe_both} ${OrbiterExe_graphics} ${OrbiterExe_ng}
-	)
-
-endif()
-
-if(NOT ${ORBITER_GRAPHICS} STREQUAL ${OrbiterExe_ng})
-	set(BUILD_ORBITER_DX7 1)
-else()
-	set(BUILD_ORBITER_DX7 0)
-endif()
-if(NOT ${ORBITER_GRAPHICS} STREQUAL ${OrbiterExe_graphics})
-	set(BUILD_ORBITER_SERVER 1)
-else()
-	set(BUILD_ORBITER_SERVER 0)
-endif()
-
-if(BUILD_ORBITER_DX7)
-	set(OrbiterTgt Orbiter)
-	set(ORBITER_LIB $<TARGET_LINKER_FILE:Orbiter>)
-else()
-	set(OrbiterTgt Orbiter_server)
-	set(ORBITER_LIB $<TARGET_LINKER_FILE:Orbiter_server>)
-endif()
+set(OrbiterTgt Orbiter)
+set(ORBITER_LIB $<TARGET_LINKER_FILE:Orbiter>)
 
 # =====================================================================================
 # Configure Orbiter.cfg for externally installed planet textures
@@ -206,37 +165,24 @@ set(ORBITER_PLANET_TEXTURE_INSTALL_DIR
 	PATH
 	"Planet texture installation directory (e.g. C:/Orbiter2016/Textures)"
 )
+
+if(DEFINED ENV{ORBITER_PLANET_TEXTURE_INSTALL_DIR})
+  set(ORBITER_PLANET_TEXTURE_INSTALL_DIR $ENV{ORBITER_PLANET_TEXTURE_INSTALL_DIR})
+  message(STATUS "Using environment: ORBITER_PLANET_TEXTURE_INSTALL_DIR=${ORBITER_PLANET_TEXTURE_INSTALL_DIR}")
+endif()
+
 string(COMPARE NOTEQUAL ${ORBITER_PLANET_TEXTURE_INSTALL_DIR} "${ORBITER_BINARY_ROOT_DIR}/Textures" CUSTOM_PLANET_TEXTURE_DIR)
 
 if (${CUSTOM_PLANET_TEXTURE_DIR})
 	string(REPLACE  "/" "\\" ORBITER_PLANET_TEXTURE_INSTALL_DIR_W "${ORBITER_PLANET_TEXTURE_INSTALL_DIR}")
 
-	if(BUILD_ORBITER_DX7)
-		configure_file(${ORBITER_SOURCE_DIR}/Orbiter.cfg.in ${ORBITER_BINARY_ROOT_DIR}/Orbiter.cfg)
-		install(FILES
-			${ORBITER_BINARY_ROOT_DIR}/Orbiter.cfg
-			DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
-		)
-	endif()
-	
-	if(BUILD_ORBITER_SERVER)
-		configure_file(${ORBITER_SOURCE_DIR}/Orbiter.cfg.in ${ORBITER_BINARY_ROOT_DIR}/Orbiter_NG.cfg)
-		install(FILES
-			${ORBITER_BINARY_ROOT_DIR}/Orbiter_NG.cfg
-			DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
-		)
-	endif()
-	
+	configure_file(${ORBITER_SOURCE_DIR}/Orbiter.cfg.in ${ORBITER_BINARY_ROOT_DIR}/Orbiter.cfg)
+	install(FILES ${ORBITER_BINARY_ROOT_DIR}/Orbiter.cfg DESTINATION ${ORBITER_INSTALL_ROOT_DIR})
 endif()
 
 
 # =====================================================================================
 # Find required and optional build tools
-
-#option(ORBITER_BUILD_WITH_DX7
-#	"Compile Orbiter with built-in DX7 graphics. If off, the server version for external graphics clients will be built."
-#	ON
-#)
 
 option(
 	ORBITER_BUILD_D3D9CLIENT
@@ -283,32 +229,6 @@ if(ORBITER_BUILD_D3D9CLIENT)
 endif()
 
 if (ORBITER_MAKE_DOC)
-	find_program(ODT_TO_PDF_COMPILER
-		NAMES soffice libreoffice
-		HINTS "C:/Program Files/LibreOffice/program"
-		REQUIRED
-	)
-
-	set(ODT_TO_PDF_FLAGS
-		"--headless --convert-to pdf --outdir <outdir> <infile>"
-		CACHE
-		STRING
-		"Compiler options for the OdtToPdfCompiler"
-	)
-
-	find_program(DOC_TO_PDF_COMPILER
-		NAMES soffice libreoffice
-		HINTS "C:/Program Files/LibreOffice/program"
-		REQUIRED
-	)
-
-	set(DOC_TO_PDF_FLAGS
-		"--headless --convert-to pdf --outdir <outdir> <infile>"
-		CACHE
-		STRING
-		"Compiler options for the DocToPdfCompiler"
-	)
-	
 	find_package(Doxygen REQUIRED)
 endif()
 
@@ -353,6 +273,15 @@ INSTALL(FILES ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
 	DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
 	COMPONENT RuntimeLibraries
 )
+
+# readme and license
+INSTALL(FILES readme.txt
+	DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
+)
+INSTALL(FILES LICENSE
+	DESTINATION ${ORBITER_INSTALL_ROOT_DIR}
+)
+#COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/Doc/TransX\ readme.txt ${ORBITER_BINARY_DOC_DIR}/TransX/TransX\ readme.txt
 
 # Sub-projects
 add_subdirectory(Extern)
