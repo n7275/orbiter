@@ -115,6 +115,22 @@ typedef struct {      // airfoil definition
 	double A;             //   aspect ratio (b^2/S with wingspan b)
 } AirfoilSpec;
 
+typedef enum {
+	DynMass1Ax,           // SDOF, one axis
+	DynMass2Ax,           // 2 axis, coupled elliptical response
+	DynMass3Ax            // 3 axis, coupled ellipsoidal response
+} DynMassType;
+
+typedef struct {
+	int version;          // 0 futureproofing
+	DynMassType dmType;   // 1, 2, or 3 coupled axes
+	Vector Position; 	  // The location of the dynamic mass in vessel coordinates
+	Matrix Orientation;   // Rotation matrix describing the transform from vessel +Z to DynamicMass +x
+	double mass;          // Mass        (kg)
+	double stiffness[3];  // Stiffness   (N/m)
+	double damping[3];    // Damping     (Ns/m)
+} DynamicMassSpec;
+
 typedef struct {      // airfoil control surface definition
 	AIRCTRL_TYPE ctrl;      // control type
 	Vector ref;             // lift/drag attack point
